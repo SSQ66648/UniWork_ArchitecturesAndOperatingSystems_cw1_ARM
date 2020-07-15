@@ -1,0 +1,353 @@
+@ Coursework 1 - Cipher Program
+@ Authors: Jake Williams (ekf17xeu/100209394)
+@          Tim Tufnail-Clarke ()
+@ Created 29/10/18
+@ Version 1.0
+
+.data @Data Set
+.balign 4
+
+mode: .word 0 @Initialised to 0
+keyLength: .word 0 @Stores the length of the key / Amount of columns
+messageLength: .word 0 @Stores the length of the message
+
+nrows: .word 0 @Initialised to zero
+textLn: .skip 1000 @Allocate an array of 1000 characters - This will be the message
+keyArray: .skip 25 @Allocate 25 bytes for the key
+indexArray: .skip 25 @Will keep track of index array
+output: .asciz "Testing: %d\n" @Test output for digits
+output_String: .asciz "Testing: %c\n" @Test output for characters
+
+.text         @Instructions Set
+.balign 4
+.global main  @Main Function
+
+main:
+	PUSH {r4-r12,lr} @Pushes r4-12 scratch registers and link register onto stack
+
+	MOV r4,r1 @Moves argv into r4
+	LDR r5,[r4, #4] @ r5 = Pointer to Mode
+	LDR r5,[r5] @Loads the value in r5 into r5, Now hold whatever mode was entered by the user
+	LDR r8,=mode @r8 = pointer to mode in static memory
+	STR r5,[r8] @Store the mode entered by the user into static memory 'mode'
+
+
+	LDR r6,[r4,#8] @r6 = Pointer to first element of message (array)
+	LDR r8,=keyArray @This will store the key in static memory
+	MOV r7,#0 @Key Length Variable
+	keyLoop:
+		LDRB r2,[r6],#1 @Increments by one to get the next element in the array
+		CMP r2,#0 @If it has reached the end of the line
+		BEQ endKeyLoop @Skip to end the loop
+
+		STRB r2,[r8],#1 @Stores the current character in r2 into the new keyArray
+
+		ADD r7,r7,#1 @Increment the key Length variable by 1
+		B keyLoop
+
+	endKeyLoop:
+	
+	@Outputs the key length
+	LDR r1,=keyLength @Load keyLength into r1
+	STR r7,[r1] @Store r7 into the value of r1
+
+	LDR r8,=textLn @r8 - base array address for textLn / address of the first element
+	MOV r9,#0 @r9 - Stores the length of the message
+	MOV r11, r8  @Moves the text from the base address into r11
+	removeCharLoop:
+		BL getchar @Gets the first character from the text file
+		CMP r0,#-1 @If it is at the end of the file it will return -1
+		BEQ endloop @Hence why it exits the loop if it equals -1
+
+		@ Remove all characters except alphabet characters upper and lower case
+
+		CMP r0,#65 @If it is less than 'A', ignore the character
+		BLT removeCharLoop
+		CMP r0,#122 @If it is greater than 'z', ignore the character
+		BGT removeCharLoop
+
+		CMP r0,#90 @If it is less than 'Z' move to check
+		ADDLE r0,r0,#32 @Turns upper case into lower case characters
+		BLT check
+			CMP r0,#97 @If it is less than 'a', ignore the character
+			BLT removeCharLoop
+		check:
+			STRB r0,[r11],#1 @Store the character into the message array
+			ADD r9,r9,#1 @Increment the length of the message by 1
+		B removeCharLoop @Branch back to the beginning
+	endloop:
+
+	LDR r1,=messageLength @Store the length of the message into static memory
+	STR r9,[r1]
+
+	@ Finding the amount of rows in the 2D array
+
+	LDR r4,=nrows @Load the static memory address of nrows into r4
+	LDR r5,=messageLength 
+	LDR r5,[r5] @Load the static mem address of messageLength and load the value inside
+	LDR r6,=keyLength
+	LDR r6,[r6] @Same process as above but using keyLength and r6
+	SUB r6,r6,#1 @Subtract r6 by 1 to get keyLength-1 (since it is used as an index check)
+	MOV r7,#0 @ This will store the amount of rows for the loop
+	MOV r8,#0 @ This will act as a counter for when to know when to add 1 to a row
+	MOV r9,#0 @ This will count the total iterations, so it doesnt run into null data in array
+
+	findRowsLoop:
+		CMP r9,r5 @If the total amount of iterations equal the length of the message:
+		BEQ exitRowLoop @Exit the loop
+
+		CMP r8,r6 @If the counter is equal to the keyLength-1, move to the reset method
+		BEQ resetR8
+
+		ADD r9,r9,#1 @Increment the total iterations by 1
+		ADD r8,r8,#1 @Increment the counter by 1
+
+		B findRowsLoop
+
+		resetR8:
+			ADD r7,r7,#1 @Add 1 to the amount of rows
+			MOV r8,#0 @Reset the counter to 0
+
+			B findRowsLoop 
+
+	exitRowLoop:
+
+	STR r7,[r4] @Store the value of r7 into the value of nrows in static memory
+	LDR r4,[r4] @Loads the value of rows into r4
+	ADD r6,r6,#1 @Increments the key length register by one as it was previously subtracted by 1
+	MUL r10,r4,r6 @nrows*keyLength (same as nRows*nColumns) to find the new messageLength
+	LDR r5,=messageLength @Loads r5 with the static memory 'messageLength'
+	STR r10,[r5] @Store the new value of messageLength into the static memory
+
+	@Now we have the new message length, we need to fill the empty spaces with X's
+
+	@ The following method  will fill the empty spaces with the appropriate amount of X's
+
+	LDR r4,=messageLength @ This will now equal the rows*columns
+	LDR r4,[r4] @Loads the value of r4 into r4
+	LDR r5,=textLn @Loads the message array into r5
+	MOV r6,#0 @ Will act as a counter
+	
+	fillLoop:
+
+		CMP r6,r4 @If the counter is the same as the message length:
+		BEQ exitFillLoop @Exit the loop
+
+		LDRB r2,[r5],#1 @Loads the next value of the message array into r2
+		CMP r2,#0 @If r2 is blank, branch to fill method:
+		BEQ fill
+
+		ADD r6,r6,#1 @If the character is not blank, increment the counter by 1 and restart the loop
+		B fillLoop
+
+		fill:
+		MOV r0,#120 @Move the ascii value of 'x' into r0
+		STRB r0,[r11],#1 @ Stores an 'x' in the place of the 0
+		ADD r6,r6,#1 @Increment the counter by 1
+		B fillLoop 
+
+	exitFillLoop:
+
+	LDR r4,=textLn
+
+	@ Creating an indicies array
+	@ This could have been done earlier, but has not been required until now
+
+	LDR r4,=indexArray @r4 will store the index array, starting at element 0
+	LDR r5,=keyLength
+	LDR r5,[r5] @r5 will store the value of key length
+	SUB r5,r5,#1 @r5 will store the key length - 1, to repesent indexes
+	MOV r6,#0 @r6 will act as a counter
+	
+
+	fillIndexArrayLoop: @Starts the fill index array loop
+		STRB r6,[r4],#1 @Store the value in the counter into the index array 
+
+		CMP r5,r6 @If it has reached the same size as the keyLength-1, exit the loop
+		BEQ exitIndexArrayLoop
+
+		ADD r6,r6,#1 @Increment the counter by 1
+		B fillIndexArrayLoop
+	exitIndexArrayLoop:
+
+	@This is the section where the code will
+
+	LDR r4,=mode
+	LDRB r4,[r4]
+
+	CMP r4,#48
+	BEQ encoder
+
+	CMP r4,#49
+	BEQ decoder
+
+	encoder:
+		BL encode
+		B exitChoice
+
+	decoder:
+		BL decode
+
+	exitChoice:
+
+@	LDR r4,=indexArray
+@	LDR r5,=keyLength
+@	LDR r5,[r5]
+@	MOV r6,#0
+@	MOV r7,r4
+@	loop3:
+@		LDR r0,=output
+@		LDRB r2,[r4],#1
+@
+@		CMP r6,r5
+@		BEQ exit3
+@
+@		MOV r1,r2
+@		BL printf
+@
+@		ADD r6,r6,#1
+@		B loop3
+
+@	exit3:
+
+	POP {r4-r12,lr}
+	BX lr
+	
+
+encode:
+	PUSH {r4-r12,lr}
+
+	@ Using a bubble sort to organise the indexArray
+
+	@r0 - i - First value to compare
+	@r1 - i+1 - Second value in list to compare
+	@r4: indexArray (first element when inititalised)
+	@r5: keyArray (firstElement when initialised)
+	@r6: keyLength
+	@r9: Index for keyArray, if it equals keyLength-1 it will exit the innerEncodeLoop
+	@r10: Index for keyArray + 1, (this will find i+1 which is stored in r1)
+	@r11: Detected Sort, if nothing is sorted in the inner loop, this will remain at 0
+
+	LDR r4,=indexArray
+	LDR r5,=keyArray
+	LDR r6,=keyLength
+	LDR r6,[r6] @Loads value from address r6 into r6
+	MOV r8,r6
+	SUB r8,r8,#1 @r8: keyLength -1
+	MOV r9,#0 @Inner index
+	MOV r10,#0 
+	MOV r2,#0
+
+	outerEncodeLoop:
+		CMP r2,r6 @If nothing was sorted on the last iteration, exit the program.
+		BEQ exitOuterEncodeLoop
+
+		MOV r9,#0 @Inner index = 0
+		MOV r10,#0
+		MOV r7,#0
+		
+		innerEncodeLoop:
+			CMP r9,r8
+			BEQ exitInnerEncodeLoop
+
+			LDRB r0,[r5, r9] @r0 now stores the ASCII value of i
+			ADD r10,r9,#1
+			LDRB r1,[r5,r10] @r1 now stores the ASCII value of i+1
+
+			CMP r0,r1
+			BLT skip
+
+			STRB r0,[r5,r10]
+			STRB r1,[r5,r9] @Both these swap the values in the list
+
+			LDRB r0,[r4,r9] @Applies same sorting to list of indexes
+			LDRB r1,[r4,r10]
+			STRB r0,[r4,r10]
+			STRB r1,[r4,r9]
+
+			skip:
+
+			ADD r9,r9,#1 @Moves to the next character
+			ADD r7,r7,#1
+
+			B innerEncodeLoop
+
+		exitInnerEncodeLoop:
+
+	ADD r2,r2,#1
+
+	B outerEncodeLoop
+
+	exitOuterEncodeLoop:
+
+	@Now to print the encrypted message
+
+	@r4 - Message Array
+	@r5 - Index Array
+	@r6 - Key Length
+	@r7 - nrows
+
+	@r0 - Character (put through putchar)
+	@r1 - Outer loop incrementer
+	@r2 - Inner loop incrementer
+
+	LDR r4,=textLn
+	LDR r5,=indexArray
+	LDR r6,=keyLength
+	LDR r6,[r6]
+	LDR r7,=nrows
+	LDR r7,[r7]
+
+	MOV r8,#0
+
+	@ Outer loop will inrement up to key length
+	@ Inner loop will increment up to nrows
+
+	outerPrintLoop:
+		CMP r8,r6 @Compare incrementer to keyLength
+		BEQ exitOuterPrintLoop
+
+		MOV r9,#0
+
+		innerPrintLoop:
+			CMP r9,r7
+			BEQ exitInnerPrintLoop
+
+			LDRB r3,[r5,r8] @Loads the index number from the array into r8
+			MLA r2,r9,r6,r3 @r2 = (r9*r6) + r3
+
+			LDRB r0,[r4,r2]
+			BL putchar
+
+			ADD r9,r9,#1
+
+			B innerPrintLoop
+
+		exitInnerPrintLoop:
+
+	ADD r8,r8,#1
+
+	B outerPrintLoop
+
+	exitOuterPrintLoop:
+
+	POP {r4-r12,lr}
+	BX lr
+
+decode:
+	PUSH {r4-r12,lr}
+
+	POP {r4,lr}
+	BX lr
+
+
+
+
+@External
+
+.global printf
+
+
+
+
+
